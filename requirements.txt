@@ -7,3 +7,4 @@ teler==0.2.0
 numpy==1.26.4
 scipy==1.15.3
 openai==0.27.8
+websockets==12.0
