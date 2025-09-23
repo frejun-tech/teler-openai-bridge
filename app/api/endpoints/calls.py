@@ -203,33 +203,42 @@ async def media_stream(ws: WebSocket):
                 except Exception as e:
                     logger.error(f"[media-stream][teler] ❌ recv_from_teler error: {type(e).__name__}: {e}")
 
-            
-                """Receive audio/text from OpenAI, downsample, and send to Teler"""
+
+                """Receive audio/text from OpenAI, buffer, downsample, and send to Teler"""
                 try:
                     chunk_id = 1
+                    audio_buffer = []
+
                     async for msg in openai_ws:
                         data = json.loads(msg)
                         logger.debug(f"Data {data}")
                         msg_type = data.get("type", "unknown")
                         logger.info(f"[media-stream][openai] 📥 Received message: type='{msg_type}'")
 
-                        if msg_type == "response.audio.delta":
+                        if msg_type == "response.output_audio.delta":
                             audio_b64 = data.get("delta", "")
                             if audio_b64:
                                 try:
                                     pcm_data = base64.b64decode(audio_b64)
-                                    downsampled_data = audio_resampler.downsample(pcm_data)
-                                    downsampled_b64 = base64.b64encode(downsampled_data).decode("utf-8")
+                                    audio_buffer.append(pcm_data)
 
-                                    await ws.send_json({
-                                        "type": "audio",
-                                        "audio_b64": downsampled_b64,
-                                        "chunk_id": chunk_id
-                                    })
-                                    logger.debug(f"[media-stream][teler] ▶️ Sent audio chunk {chunk_id} to Teler")
-                                    chunk_id += 1
+                                    # Flush buffer every 3 chunks
+                                    if len(audio_buffer) >= 3:
+                                        combined = b"".join(audio_buffer)
+                                        downsampled_data = audio_resampler.downsample(combined)
+                                        downsampled_b64 = base64.b64encode(downsampled_data).decode("utf-8")
+
+                                        await ws.send_json({
+                                            "type": "audio",
+                                            "audio_b64": downsampled_b64,
+                                            "chunk_id": chunk_id
+                                        })
+                                        logger.debug(f"[media-stream][teler] ▶️ Sent audio chunk {chunk_id} to Teler")
+                                        chunk_id += 1
+                                        audio_buffer = []  # reset buffer
                                 except Exception as e:
                                     logger.error(f"[media-stream][openai] ❌ Audio processing error: {e}")
+
                         elif msg_type == "response.completed":
                             transcript = data.get("response", {}).get("output_text", "")
                             if transcript:
@@ -251,15 +260,19 @@ async def media_stream(ws: WebSocket):
                             error_info = data.get("error", {})
                             logger.error(f"Data: {data}")
                             logger.error(f"[media-stream][openai] ❌ OpenAI error: {error_info}")
+
                 except websockets.exceptions.ConnectionClosed:
                     logger.error("[media-stream][openai] 🔌 OpenAI connection closed.")
                 except Exception as e:
                     logger.error(f"[media-stream][openai] ❌ send_to_teler error: {type(e).__name__}: {e}")
 
+
             async def send_to_teler():
-                """Receive audio/text from OpenAI, downsample, and send to Teler"""
+                """Receive audio/text from OpenAI, buffer for smooth playback, downsample, and send to Teler"""
                 try:
                     chunk_id = 1
+                    audio_buffer = []
+
                     async for msg in openai_ws:
                         data = json.loads(msg)
                         logger.debug(f"Data {data}")
@@ -272,16 +285,23 @@ async def media_stream(ws: WebSocket):
                             if audio_b64:
                                 try:
                                     pcm_data = base64.b64decode(audio_b64)
-                                    downsampled_data = audio_resampler.downsample(pcm_data)
-                                    downsampled_b64 = base64.b64encode(downsampled_data).decode("utf-8")
+                                    audio_buffer.append(pcm_data)
 
-                                    await ws.send_json({
-                                        "type": "audio",
-                                        "audio_b64": downsampled_b64,
-                                        "chunk_id": chunk_id
-                                    })
-                                    logger.debug(f"[media-stream][teler] ▶️ Sent audio chunk {chunk_id} to Teler")
-                                    chunk_id += 1
+                                    # Flush every 3 chunks for smoother playback
+                                    if len(audio_buffer) >= 3:
+                                        combined = b"".join(audio_buffer)
+                                        downsampled_data = audio_resampler.downsample(combined)
+                                        downsampled_b64 = base64.b64encode(downsampled_data).decode("utf-8")
+
+                                        await ws.send_json({
+                                            "type": "audio",
+                                            "audio_b64": downsampled_b64,
+                                            "chunk_id": chunk_id
+                                        })
+                                        logger.debug(f"[media-stream][teler] ▶️ Sent buffered audio chunk {chunk_id} to Teler")
+                                        chunk_id += 1
+                                        audio_buffer = []
+
                                 except Exception as e:
                                     logger.error(f"[media-stream][openai] ❌ Audio processing error: {e}")
 
@@ -310,6 +330,18 @@ async def media_stream(ws: WebSocket):
                             logger.error(f"Data: {data}")
                             logger.error(f"[media-stream][openai] ❌ OpenAI error: {error_info}")
 
+                    # Flush any remaining buffered audio
+                    if audio_buffer:
+                        combined = b"".join(audio_buffer)
+                        downsampled_data = audio_resampler.downsample(combined)
+                        downsampled_b64 = base64.b64encode(downsampled_data).decode("utf-8")
+                        await ws.send_json({
+                            "type": "audio",
+                            "audio_b64": downsampled_b64,
+                            "chunk_id": chunk_id
+                        })
+                        logger.debug(f"[media-stream][teler] ▶️ Sent final buffered audio chunk {chunk_id} to Teler")
+
                 except websockets.exceptions.ConnectionClosed:
                     logger.error("[media-stream][openai] 🔌 OpenAI connection closed.")
                 except Exception as e:
@@ -334,4 +366,3 @@ async def media_stream(ws: WebSocket):
         if ws.client_state != WebSocketState.DISCONNECTED:
             await ws.close()
         logger.info("[media-stream] 🔄 Connection closed.")
-
