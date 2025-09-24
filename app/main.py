@@ -57,11 +57,6 @@ async def ngrok_status():
         "fallback_domain": getattr(settings, '_server_domain_fallback', None)
     }
 
-
-# --- In-memory store for call metadata ---
-call_metadata = defaultdict(dict)
-
-
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(

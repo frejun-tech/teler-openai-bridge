@@ -195,6 +195,7 @@ Thumbs.db
 *.tmp
 *.temp
 .cache/
+app/api/endpoints/temp.py
 
 # Local development
 local_settings.py
@@ -202,3 +203,4 @@ local_settings.py
 .env.development
 .env.test
 .env.production
+

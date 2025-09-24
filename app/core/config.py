@@ -26,10 +26,7 @@ class Setting(BaseSettings):
     
     # AI and Call Configuration 
     voice: str = "alloy"
-    system_message: str = "You are a friendly and helpful AI voice assistant on a phone call. Be concise and clear."
-
-    # Number of audio chunks to buffer before sending to Teler
-    audio_chunk_count: int = 5  
+    system_message: str = "Speak clearly and briefly. Confirm understanding before taking actions."
     
     # Logging
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
@@ -39,5 +36,5 @@ class Setting(BaseSettings):
         case_sensitive = False
     
     
-# Create settings instance
+# settings instance
 settings = Setting()
