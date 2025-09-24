@@ -1,59 +1,31 @@
 # Teler OpenAI Bridge
 
-A reference integration between Teler and OpenAI Realtime API, based on Media Streaming over WebSockets. This project bridges Teler (telephony calls) with OpenAI Realtime API for live two-way conversational agents.
+A reference integration between **Teler** and **OpenAI Realtime API**, based on media streaming over WebSockets.
 
-It handles:
+## About
 
-Incoming audio from Teler (8kHz PCM16)
+This project is a reference implementation to bridge **Teler** and **OpenAI Realtime API**. It enables real-time media streaming over WebSockets, facilitating live audio interactions.
 
-Upsampling to 24kHz for OpenAI
+---
 
-Sending audio chunks via WebSocket
+## Features
 
-Receiving AI-generated audio (24kHz PCM16)
+- Real-time streaming of media via WebSockets
+- Bi-directional communication between Teler client and OpenAI Realtime API
+- Sample structure for deployment (Docker, environment variables)
+- Basic error handling and connection management
+- Easily extensible / modifiable to suit custom needs
 
-Downsampling back to 8kHz for Teler
+---
 
-Streaming transcripts and responses in real-time
+### Prerequisites
 
-📞 Flow
+Ensure you have the following installed / available:
 
-Teler connects → streams 8kHz PCM audio chunks.
+- Python 3.x
+- Docker & Docker Compose (if using containerized deployment)
+- Valid API credentials / access:
+  - Teler account / API key / endpoints
+  - OpenAI account / Realtime API access
 
-App upsamples to 24kHz → sends to OpenAI Realtime API.
-
-OpenAI generates response audio (24kHz PCM16).
-
-App downsamples to 8kHz → sends back to Teler.
-
-Smooth playback ensured by audio buffering.
-
-🔄 Call Flow
-
-Teler → Bridge
-
-Receives 8kHz PCM16 audio chunks from the telephony call.
-
-Upsamples to 24kHz.
-
-Sends to OpenAI via WebSocket (input_audio_buffer.append).
-
-Bridge → OpenAI
-
-Handles session creation (session.update).
-
-Forwards audio in real-time.
-
-OpenAI → Bridge
-
-Streams AI-generated audio (response.output_audio.delta).
-
-Buffers chunks for smooth playback.
-
-Downsamples to 8kHz.
-
-Bridge → Teler
-
-Sends audio back into the live call.
-
-Transcripts and AI text logs available in console.
+---
