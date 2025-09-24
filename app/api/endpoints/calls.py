@@ -3,7 +3,7 @@ import asyncio
 import logging
 
 import websockets
-from fastapi import (APIRouter, HTTPException, Request, WebSocket, status)
+from fastapi import (APIRouter, HTTPException, WebSocket, status)
 from fastapi.responses import JSONResponse
 from fastapi.websockets import WebSocketState
 from pydantic import BaseModel
@@ -50,32 +50,6 @@ async def stream_flow(payload: CallFlowRequest):
     }
     return JSONResponse(stream_flow)
 
-@router.post("/incoming-call")
-async def incoming_call(request: Request):
-    """
-    Return call flow as a JSON Response for incoming URL
-    """
-    try:
-        body = await request.json()
-        if settings.teler_account_id and body.get("account_id") != settings.teler_account_id:
-            raise HTTPException(status_code=403, detail="Invalid account_id")
-
-        call_id = body.get("call_id")
-        logger.info(f"Incoming call {call_id}, responding with stream action.")
-        ws_url = f"wss://{settings.server_domain}/api/v1/calls/media-stream"
-        stream_flow = {
-            "action": "stream",
-            "ws_url": ws_url,
-            "chunk_size": 500,
-            "sample_rate": "8k",
-            "record": True
-        }
-        return JSONResponse(stream_flow)
-    except Exception as e:
-        logger.error(f"Error in /incoming-call: {e}")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
-
-
 @router.post("/initiate-call", status_code=status.HTTP_200_OK)
 async def initiate_call(call_request: CallRequest):
     """
@@ -103,20 +77,6 @@ async def initiate_call(call_request: CallRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
             detail="Call creation failed."
         )
-
-@router.post("/call-status")
-async def call_status(request: Request):
-    """
-    Check call status
-    """
-    try:
-        body = await request.json()
-        logger.info(f"Call status update: {body.get('event')}")
-        return {"status": "ok"}
-    except Exception as e:
-        logger.error(f"Error in /call-status: {e}")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
-
 
 @router.websocket("/media-stream")
 async def media_stream(websocket: WebSocket):
