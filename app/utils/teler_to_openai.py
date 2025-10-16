@@ -12,9 +12,9 @@ router = APIRouter()
 audio_resampler = AudioResampler()
 
 
-async def recv_from_teler(openai_ws: WebSocket, websocket: WebSocket) -> None:
+async def teler_to_openai(openai_ws: WebSocket, websocket: WebSocket) -> None:
     """
-    Receive audio from Teler, upsample, and send to OpenAI
+    Receive audio from Teler and send to OpenAI
     """
     try:
         while True:
@@ -25,21 +25,14 @@ async def recv_from_teler(openai_ws: WebSocket, websocket: WebSocket) -> None:
             audio_b64 = data["data"]["audio_b64"]
             logger.info(f"[media-stream][teler] 🎵 Received audio chunk ({len(audio_b64)} bytes)")
             try:
-                # Decode base64 to bytes
-                pcm_8k = base64.b64decode(audio_b64)
-                # Upsample 8k -> 24k
-                upsampled_data = audio_resampler.upsample(pcm_8k)
-                # Encode back to base64 for OpenAI
-                upsampled_b64_24k = base64.b64encode(upsampled_data).decode("utf-8")
-
                 await openai_ws.send(json.dumps({
                     "type": "input_audio_buffer.append",
-                    "audio": upsampled_b64_24k
+                    "audio": audio_b64 
                 }))
-                logger.debug(f"[media-stream][teler] 📤 Sent upsampled PCM16 24k audio to OpenAI")
+                logger.debug(f"[media-stream][teler] 📤 Sent PCM16 16k audio to OpenAI")
             except Exception as e:
                 logger.error(f"[media-stream][teler] ❌ Audio processing error: {e}")
     except WebSocketDisconnect:
         logger.error("[media-stream][teler] 🔌 Teler WebSocket disconnected.")
     except Exception as e:
-        logger.error(f"[media-stream][teler] ❌ recv_from_teler error: {type(e).__name__}: {e}")
+        logger.error(f"[media-stream][teler] ❌ teler_to_openai error: {type(e).__name__}: {e}")

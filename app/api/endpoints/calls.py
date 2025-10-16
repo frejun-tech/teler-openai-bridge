@@ -9,8 +9,8 @@ from fastapi.websockets import WebSocketState
 from pydantic import BaseModel
 
 from app.core.config import settings
-from app.utils.recv_from_teler import recv_from_teler
-from app.utils.send_to_teler import send_to_teler
+from app.utils.teler_to_openai import teler_to_openai
+from app.utils.openai_to_teler import openai_to_teler
 from app.utils.teler_client import TelerClient
 from app.utils.audio_resample import AudioResampler
 
@@ -45,7 +45,7 @@ async def stream_flow(payload: CallFlowRequest):
         "action": "stream",
         "ws_url": ws_url,
         "chunk_size": 500,
-        "sample_rate": "8k",  
+        "sample_rate": "16k",  
         "record": True
     }
     return JSONResponse(stream_flow)
@@ -103,14 +103,15 @@ async def media_stream(websocket: WebSocket):
                 "session": {
                     "type": "realtime",
                     "instructions": settings.system_message,  # system prompt for context
-                    "input_audio_format": "pcm16",            # raw 16-bit PCM
-                    "output_audio_format": "pcm16",           # consistent output
+                    "input_audio_format": "pcm16",            
+                    "output_audio_format": "pcm16",           
                     "voice": "verse",                         # natural TTS voice (can be "alloy", "verse", etc.)
                     "input_audio_transcription": { 
                         "model": "whisper-1"                  # accurate speech-to-text
                     },
                     "turn_detection": {                       # handles speech turns
-                        "type": "server_vad",
+                        "type": "semantic_vad",
+                        "eagerness": "medium",
                         "threshold": 0.5,                     # sensitivity
                         "prefix_padding_ms": 300,             # keeps some pre-speech audio
                         "silence_duration_ms": 800            # faster turn cutoff (default is 1000ms)
@@ -151,8 +152,8 @@ async def media_stream(websocket: WebSocket):
             }))
 
             # Both functions run concurrently as tasks
-            recv_task = asyncio.create_task(recv_from_teler(openai_ws, websocket))
-            send_task = asyncio.create_task(send_to_teler(openai_ws, websocket))
+            recv_task = asyncio.create_task(teler_to_openai(openai_ws, websocket))
+            send_task = asyncio.create_task(openai_to_teler(openai_ws, websocket))
             
             await asyncio.gather(recv_task, send_task)
 
