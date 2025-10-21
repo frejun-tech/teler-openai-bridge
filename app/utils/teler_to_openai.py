@@ -29,7 +29,7 @@ async def teler_to_openai(openai_ws: WebSocket, websocket: WebSocket) -> None:
                     "type": "input_audio_buffer.append",
                     "audio": audio_b64 
                 }))
-                logger.debug(f"[media-stream][teler] 📤 Sent PCM16 16k audio to OpenAI")
+                logger.debug(f"[media-stream][teler] 📤 Sent Base64 16k audio to OpenAI")
             except Exception as e:
                 logger.error(f"[media-stream][teler] ❌ Audio processing error: {e}")
     except WebSocketDisconnect:

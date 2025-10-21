@@ -44,7 +44,7 @@ async def stream_flow(payload: CallFlowRequest):
     stream_flow = {
         "action": "stream",
         "ws_url": ws_url,
-        "chunk_size": 500,
+        "chunk_size": 1200,
         "sample_rate": "16k",  
         "record": True
     }
@@ -102,24 +102,16 @@ async def media_stream(websocket: WebSocket):
                 "type": "session.update",
                 "session": {
                     "type": "realtime",
-                    "instructions": settings.system_message,  # system prompt for context
-                    "input_audio_format": "pcm16",            
-                    "output_audio_format": "pcm16",           
-                    "voice": "verse",                         # natural TTS voice (can be "alloy", "verse", etc.)
-                    "input_audio_transcription": { 
-                        "model": "whisper-1"                  # accurate speech-to-text
+                    "instructions": settings.system_message,
+                    "voice": "verse",
+                    "input_audio_transcription": {
+                        "model": "whisper-1"
                     },
-                    "turn_detection": {                       # handles speech turns
-                        "type": "semantic_vad",
-                        "eagerness": "medium",
-                        "threshold": 0.5,                     # sensitivity
-                        "prefix_padding_ms": 300,             # keeps some pre-speech audio
-                        "silence_duration_ms": 800            # faster turn cutoff (default is 1000ms)
-                    },
-                    "modalities": ["text", "audio"],          # ensures both text + audio output
-                    "conversation": "default",                # session conversation thread
+                    "modalities": ["text", "audio"],
+                    "conversation": "default"
                 }
             }
+
 
             logger.info("[media-stream][openai] 📤 Sending session update...")
             await openai_ws.send(json.dumps(session_update))
