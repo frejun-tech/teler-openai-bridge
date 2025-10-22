@@ -48,13 +48,12 @@ Ensure you have the following installed / available:
 
 ## Environment Variables
 
-| Variable           | Description                       | Default  |
-| ------------------ | --------------------------------- | -------- |
-| `OPENAI_API_KEY`   | Your OpenAI API key               | Required |
-| `TELER_ACCOUNT_ID` | Teler Account Id                  | Required |
-| `TELER_API_KEY`    | Your Teler API key                | Required |
-| `SERVER_DOMAIN`    | Your ngrok domain (auto-detected) | Required |
-| `NGROK_AUTHTOKEN`  | Your ngrok auth token             | Required |
+| Variable          | Description                       | Default  |
+| ----------------- | --------------------------------- | -------- |
+| `OPENAI_API_KEY`  | Your OpenAI API key               | Required |
+| `TELER_API_KEY`   | Your Teler API key                | Required |
+| `SERVER_DOMAIN`   | Your ngrok domain (auto-detected) | Required |
+| `NGROK_AUTHTOKEN` | Your ngrok auth token             | Required |
 
 ## API Endpoints
 

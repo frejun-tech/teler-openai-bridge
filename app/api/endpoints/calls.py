@@ -28,8 +28,6 @@ class CallRequest(BaseModel):
     from_number: str
     to_number: str
 
-# FastAPI Endpoints 
-
 @router.get("/")
 async def root():
     return {"message": "Welcome to the Teler-OpenAI bridge"}
@@ -39,7 +37,6 @@ async def stream_flow(payload: CallFlowRequest):
     """
     Return stream flow as JSON Response containing websocket url to connect
     """
-    # Build ws_url from configured server domain
     ws_url = f"wss://{settings.server_domain}/api/v1/calls/media-stream"
     stream_flow = {
         "action": "stream",
@@ -95,15 +92,14 @@ async def media_stream(websocket: WebSocket):
                 settings.openai_ws_url,
                 extra_headers={"Authorization": f"Bearer {settings.openai_api_key}"}) as openai_ws:
             logger.info(
-                "[media-stream] ✅ Successfully connected to OpenAI WebSocket")
+                "[media-stream] Successfully connected to OpenAI WebSocket")
 
-            # Send proper session update BEFORE creating any response
             session_update = {
                 "type": "session.update",
                 "session": {
                     "type": "realtime",
                     "instructions": settings.system_message,
-                    "voice": "verse",
+                    "voice": settings.voice,
                     "input_audio_transcription": {
                         "model": "whisper-1"
                     },
@@ -112,30 +108,19 @@ async def media_stream(websocket: WebSocket):
                 }
             }
 
-
-            logger.info("[media-stream][openai] 📤 Sending session update...")
             await openai_ws.send(json.dumps(session_update))
 
-            # Wait for session confirmation
             response_data = json.loads(await openai_ws.recv())
-            logger.info(f"[media-stream][openai] 📥 Session response: {json.dumps(response_data, indent=2)}")
+            logger.debug(f"[media-stream][openai] Session response: {json.dumps(response_data, indent=2)}")
             
             if response_data.get('type') == 'session.created':
                 session_id = response_data.get('session', {}).get('id')
-                logger.info(f"[media-stream][openai] ✅ Session created with ID: {session_id}")
-                
-                # Check audio configuration
-                session = response_data.get('session', {})
-                input_format = session.get("audio", {}).get("input", {}).get("format", {}).get("type", "unknown")
-                output_format = session.get("audio", {}).get("output", {}).get("format", {}).get("type", "unknown")
-                logger.info(f"[media-stream][openai] 🎧 Audio formats - Input: {input_format}, Output: {output_format}")
+                logger.info(f"[media-stream][openai] Session created with ID: {session_id}")
                 
             else:
-                logger.error(f"[media-stream][openai] ❌ Failed to setup session: {response_data}")
+                logger.error(f"[media-stream][openai] Failed to setup session: {response_data}")
                 return
 
-            # Create initial assistant response after session is configured
-            logger.info("[media-stream][openai] 🎤 Creating initial response...")
             await openai_ws.send(json.dumps({
                 "type": "response.create",
                 "response": {
@@ -143,7 +128,6 @@ async def media_stream(websocket: WebSocket):
                 }
             }))
 
-            # Both functions run concurrently as tasks
             recv_task = asyncio.create_task(teler_to_openai(openai_ws, websocket))
             send_task = asyncio.create_task(openai_to_teler(openai_ws, websocket))
             
@@ -151,15 +135,15 @@ async def media_stream(websocket: WebSocket):
 
     except websockets.exceptions.InvalidStatusCode as e:
         logger.error(
-            f"[media-stream] ❌ WebSocket connection failed with status {e.status_code}: {e}"
+            f"[media-stream] WebSocket connection failed with status {e.status_code}: {e}"
         )
         if e.status_code == 403:
             logger.error(
-                "[media-stream] 🔍 Possible causes: Invalid API key, insufficient permissions, or rate limits."
+                "[media-stream] Possible causes: Invalid API key, insufficient permissions, or rate limits."
             )
     except Exception as e:
-        logger.error(f"[media-stream] ❌ Top-level error: {type(e).__name__}: {e}")
+        logger.error(f"[media-stream] Top-level error: {type(e).__name__}: {e}")
     finally:
         if websocket.client_state != WebSocketState.DISCONNECTED:
             await websocket.close()
-        logger.info("[media-stream] 🔄 Connection closed.")
+        logger.info("[media-stream] Connection closed.")

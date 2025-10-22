@@ -9,7 +9,6 @@ def get_current_ngrok_url() -> Optional[str]:
     Dynamically fetch the current ngrok public URL from ngrok's API
     """
     try:
-        # ngrok exposes its API on the ngrok service (port 4040) when running in Docker
         with httpx.Client(timeout=5.0) as client:
             response = client.get("http://ngrok:4040/api/tunnels")
             if response.status_code == 200:
@@ -18,7 +17,6 @@ def get_current_ngrok_url() -> Optional[str]:
                     if tunnel.get("proto") == "https":
                         public_url = tunnel.get("public_url")
                         if public_url:
-                            # Extract just the domain part (remove https://)
                             domain = public_url.replace("https://", "")
                             logger.info(f"Detected ngrok URL: {public_url}")
                             return domain
@@ -35,7 +33,7 @@ def get_server_domain() -> str:
     """
     Get the server domain, preferring the dynamic ngrok URL over environment variable
     """
-    # Try to get the current ngrok URL first
+    # Get the current ngrok URL 
     ngrok_url = get_current_ngrok_url()
     if ngrok_url:
         return ngrok_url

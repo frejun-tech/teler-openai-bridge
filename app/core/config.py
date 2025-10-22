@@ -19,14 +19,11 @@ class Setting(BaseSettings):
     server_port: int = int(os.getenv("SERVER_PORT", "8000"))
     
     # Teler configuration
-    teler_account_id: str = os.getenv("teler_account_id")
     teler_api_key: str = os.getenv("teler_api_key", "")
-    from_number: str = os.getenv("from_number", "")
-    to_number: str = os.getenv("to_number", "")
     
     # AI and Call Configuration 
-    voice: str = "alloy"
-    system_message: str = "Speak clearly and briefly. Confirm understanding before taking actions."
+    voice: str = "verse"
+    system_message: str = "Speak clearly, briefly and calm manner, keeping voice level steady. Confirm understanding before taking actions. Make sure the callee hears you clearly."
     
     # Logging
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
