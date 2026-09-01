@@ -5,6 +5,7 @@ import logging
 from fastapi import (APIRouter, WebSocket, WebSocketDisconnect)
 
 from app.utils.audio_resample import AudioResampler
+from app.utils.openai_to_teler import idSessionCreated
 
 
 logger = logging.getLogger(__name__)
@@ -19,7 +20,7 @@ async def teler_to_openai(openai_ws: WebSocket, websocket: WebSocket) -> None:
     try:
         while True:
             data = json.loads(await websocket.receive_text())
-            if data.get("type") != "audio":
+            if data.get("type") != "audio" or not idSessionCreated:
                 continue
 
             audio_b64 = data["data"]["audio_b64"]

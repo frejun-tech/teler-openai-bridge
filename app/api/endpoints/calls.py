@@ -43,7 +43,7 @@ async def stream_flow(payload: CallFlowRequest):
         "ws_url": ws_url,
         "chunk_size": 1200,
         "sample_rate": "16k",  
-        "record": True
+        "record": False
     }
     return JSONResponse(stream_flow)
 
@@ -97,18 +97,28 @@ async def media_stream(websocket: WebSocket):
             session_update = {
                 "type": "session.update",
                 "session": {
-                    "type": "realtime",
-                    "instructions": settings.system_message,
-                    "voice": settings.voice,
-                    "input_audio_transcription": {
-                        "model": "whisper-1"
+                    "type": 'realtime',
+                    "instructions": 'You are an AI assistant. Be extra kind today. Speak in English and keep your voice stable.',
+                    "output_modalities": ['audio'],
+                    "audio": {
+                        "input": {
+                            "format": {
+                                "type": "audio/pcm",
+                                "rate": 24000
+                            }
+                        },
+                        "output": {
+                            "format": { 
+                                "type": "audio/pcm",
+                                "rate": 24000
+                            },
+                        },
                     },
-                    "modalities": ["text", "audio"],
-                    "conversation": "default"
                 }
             }
 
             await openai_ws.send(json.dumps(session_update))
+            logger.info("Sent the session update response 1234.")
 
             response_data = json.loads(await openai_ws.recv())
             logger.debug(f"[media-stream][openai] Session response: {json.dumps(response_data, indent=2)}")
@@ -122,9 +132,11 @@ async def media_stream(websocket: WebSocket):
                 return
 
             await openai_ws.send(json.dumps({
-                "type": "response.create",
-                "response": {
-                    "instructions": "Greet the user warmly in one short sentence and ask how you can help. Be clear and concise. If the user requests more details, provide them simply."
+                "type": "conversation.item.create",
+                "item": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "Say hello in one short sentence."}]
                 }
             }))
 
