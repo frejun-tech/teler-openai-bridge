@@ -1,92 +1,74 @@
-import base64
 import logging
+
 import numpy as np
-import soxr
+from scipy import signal
 
 logger = logging.getLogger(__name__)
 
 
 class AudioResampler:
     """
-    Stateful audio resampler: OpenAI 24kHz PCM16 → Teler 8kHz PCM16.
-
-    Uses soxr (libsoxr) with HQ mode — Kaiser-windowed sinc filter with
-    proper anti-aliasing. The ResampleStream instance carries internal
-    filter state across chunks, so there are zero boundary artifacts
-    between consecutive WebSocket frames.
-
-    One instance per call/session. Call reset() when a new call starts.
+    High-quality audio resampling for real-time communication between Gemini (16kHz/24kHz) and Teler (16kHz→8kHz).
     """
 
-    OPENAI_RATE = 24_000
-    TELER_RATE  = 8_000
-
     def __init__(self):
-        self._stream = self._make_stream()
+        self.teler_input_sample_rate = 8000  # Teler expects 8kHz input
+        self.teler_output_sample_rate = 16000 # Teler output 16kHz
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
+        self.openai_input_sample_rate = 24000 # OpenAI expects 24kHz input
+        self.openai_output_sample_rate = 24000  # OpenAI outputs 24kHz
 
-    def downsample_base64(self, audio_b64: str) -> str:
+    def downsample(self, audio_data: bytes) -> bytes:
         """
-        Accept a single base64-encoded PCM16 chunk at 24kHz,
-        return a base64-encoded PCM16 chunk at 8kHz.
+        Downsample audio to Teler's required 8kHz.
 
-        Returns "" on empty input or error (caller can skip sending).
-        """
-        if not audio_b64:
-            return ""
-        try:
-            pcm_24k = np.frombuffer(base64.b64decode(audio_b64), dtype=np.int16)
-            if pcm_24k.size == 0:
-                return ""
-            pcm_8k: np.ndarray = self._stream.resample_chunk(pcm_24k)
-            if pcm_8k.size == 0:
-                # soxr buffers a few samples at the start — nothing to emit yet
-                return ""
-            return base64.b64encode(pcm_8k.tobytes()).decode()
-        except Exception as e:
-            logger.error(f"[AudioResampler] downsample error: {e}")
-            return ""
+        Args:
+            audio_data: Raw PCM audio data as bytes
 
-    def flush_base64(self) -> str:
-        """
-        Drain any samples still held in soxr's internal filter buffer.
-        Call this at end-of-utterance / end-of-call to avoid a short
-        tail of audio being silently dropped.
-
-        Returns "" if nothing is buffered.
+        Returns:
+            Downsampled audio data as bytes (pcm_s16le format at 8kHz)
         """
         try:
-            pcm_8k: np.ndarray = self._stream.resample_chunk(
-                np.array([], dtype=np.int16), last=True
+            audio_array = np.frombuffer(audio_data, dtype=np.int16)
+            factor = self.openai_output_sample_rate // self.teler_input_sample_rate
+
+            # Use scipy.decimate for high-quality downsampling
+            downsampled_array = signal.decimate(
+                audio_array, 
+                q=factor,
+                n=8,
+                ftype='iir'
             )
-            if pcm_8k.size == 0:
-                return ""
-            return base64.b64encode(pcm_8k.tobytes()).decode()
+            downsampled_int16 = downsampled_array.astype(np.int16)
+
+            return downsampled_int16.tobytes()
         except Exception as e:
-            logger.error(f"[AudioResampler] flush error: {e}")
-            return ""
+            logger.error(f"Error downsampling audio: {e}")
+            return audio_data
 
-    def reset(self) -> None:
+
+    def upsample(self, audio_data: bytes) -> bytes:
         """
-        Re-initialise the resampler state for a new call/session.
-        Must be called whenever a fresh audio stream begins, otherwise
-        the old filter state bleeds into the new stream.
+        Upsample audio to OpenAI's required 24kHz.
+
+        Args:
+            audio_data: Raw PCM audio data as bytes
+
+        Returns:
+            Upsampled audio data as bytes (pcm_s16le format at 24kHz)
         """
-        self._stream = self._make_stream()
+        try:
+            audio_array = np.frombuffer(audio_data, dtype=np.int16)
+            factor = self.openai_input_sample_rate // self.teler_output_sample_rate
 
-    # ------------------------------------------------------------------
-    # Internal
-    # ------------------------------------------------------------------
+            # Use scipy.resample for upsampling
+            upsampled_array = signal.resample(
+                audio_array, 
+                int(len(audio_array) * factor)
+            )
+            upsampled_int16 = upsampled_array.astype(np.int16)
 
-    @classmethod
-    def _make_stream(cls) -> soxr.ResampleStream:
-        return soxr.ResampleStream(
-            in_rate=cls.OPENAI_RATE,
-            out_rate=cls.TELER_RATE,
-            num_channels=1,
-            quality="HQ",   # HQ = 20-bit SNR, good anti-alias, low latency
-            dtype="int16",
-        )
+            return upsampled_int16.tobytes()
+        except Exception as e:
+            logger.error(f"Error upsampling audio: {e}")
+            return audio_data

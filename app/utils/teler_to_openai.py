@@ -2,35 +2,40 @@ import json
 import base64
 import logging
 
-from fastapi import (APIRouter, WebSocket, WebSocketDisconnect)
+from fastapi import (APIRouter, WebSocketDisconnect)
+
+from app.schemas.call import Call
 
 from app.utils.audio_resample import AudioResampler
-from app.utils.openai_to_teler import idSessionCreated
-
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 audio_resampler = AudioResampler()
 
 
-async def teler_to_openai(openai_ws: WebSocket, websocket: WebSocket) -> None:
+async def teler_to_openai(call: Call) -> None:
     """
     Receive audio from Teler and send to OpenAI
     """
     try:
         while True:
-            data = json.loads(await websocket.receive_text())
-            if data.get("type") != "audio" or not idSessionCreated:
+            data = json.loads(await call.teler_connection.receive_text())
+            if data.get("type") != "audio" or not call.session_updated:
                 continue
+            
+            raw_b64 = data["data"]["audio_b64"]
+            raw_pcm = base64.b64decode(raw_b64)
+            logger.debug(f"[media-stream][teler] Received audio chunk ({len(raw_pcm)} bytes)")
 
-            audio_b64 = data["data"]["audio_b64"]
-            logger.debug(f"[media-stream][teler] Received audio chunk ({len(audio_b64)} bytes)")
+            # upsample the audio before streaming to OpenAI
+            upsampled_audio_bytes = call.audio_processor.upsample(raw_pcm)
+            upsampled_audio = base64.b64encode(upsampled_audio_bytes).decode("utf-8")
             try:
-                await openai_ws.send(json.dumps({
+                await call.openai_connection.send(json.dumps({
                     "type": "input_audio_buffer.append",
-                    "audio": audio_b64 
+                    "audio": upsampled_audio 
                 }))
-                logger.debug(f"[media-stream][teler] Sent Base64 16k audio to OpenAI")
+                logger.debug(f"[media-stream][teler] Sent Base64 24k audio to OpenAI")
             except Exception as e:
                 logger.error(f"[media-stream][teler] Audio processing error: {e}")
     except WebSocketDisconnect:

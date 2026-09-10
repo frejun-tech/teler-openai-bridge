@@ -8,7 +8,7 @@ class Setting(BaseSettings):
     
     # Open AI configuration
     openai_api_key: str = os.getenv("openai_api_key", "")
-    openai_ws_url: str = os.getenv("openai_ws_url") or f"wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01"
+    openai_ws_url: str = os.getenv("openai_ws_url") or f"wss://api.openai.com/v1/realtime?model=gpt-realtime-2.1"
     
     #server configuration - dynamically get ngrok URL
     @property
@@ -21,12 +21,10 @@ class Setting(BaseSettings):
     # Teler configuration
     teler_api_key: str = os.getenv("teler_api_key", "")
     
-    # AI and Call Configuration 
-    voice: str = "verse"
-    system_message: str = "Speak clearly, briefly and calm manner, keeping voice level steady. Confirm understanding before taking actions. Make sure the callee hears you clearly."
-    
     # Logging
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
+
+    buffer_size: int = os.getenv("BUFFER_SIZE", 20)
     
     class Config:
         env_file = ".env"

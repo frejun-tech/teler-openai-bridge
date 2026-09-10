@@ -1,3 +1,8 @@
+from fastapi import websockets
+from fastapi import websockets
+from fastapi import websockets
+from fastapi import websockets
+from app.schemas import call
 import json
 import asyncio
 import logging
@@ -9,6 +14,8 @@ from fastapi.websockets import WebSocketState
 from pydantic import BaseModel
 
 from app.core.config import settings
+from app.schemas.call import Call
+from app.core.openai_config import openai_configurations, initial_instruction
 from app.utils.teler_to_openai import teler_to_openai
 from app.utils.openai_to_teler import openai_to_teler
 from app.utils.teler_client import TelerClient
@@ -41,7 +48,7 @@ async def stream_flow(payload: CallFlowRequest):
     stream_flow = {
         "action": "stream",
         "ws_url": ws_url,
-        "chunk_size": 1200,
+        "chunk_size": 1600,
         "sample_rate": "16k",  
         "record": False
     }
@@ -91,57 +98,47 @@ async def media_stream(websocket: WebSocket):
         async with websockets.connect(
                 settings.openai_ws_url,
                 extra_headers={"Authorization": f"Bearer {settings.openai_api_key}"}) as openai_ws:
-            logger.info(
-                "[media-stream] Successfully connected to OpenAI WebSocket")
+            logger.info("[media-stream] Successfully connected to OpenAI WebSocket")
 
-            session_update = {
-                "type": "session.update",
-                "session": {
-                    "type": 'realtime',
-                    "instructions": 'You are an AI assistant. Be extra kind today. Speak in English and keep your voice stable.',
-                    "output_modalities": ['audio'],
-                    "audio": {
-                        "input": {
-                            "format": {
-                                "type": "audio/pcm",
-                                "rate": 24000
-                            }
-                        },
-                        "output": {
-                            "format": { 
-                                "type": "audio/pcm",
-                                "rate": 24000
-                            },
-                        },
-                    },
-                }
-            }
+            call = Call()
+            call.teler_connection = websocket
+            call.openai_connection = openai_ws
 
-            await openai_ws.send(json.dumps(session_update))
-            logger.info("Sent the session update response 1234.")
-
-            response_data = json.loads(await openai_ws.recv())
-            logger.debug(f"[media-stream][openai] Session response: {json.dumps(response_data, indent=2)}")
+            await call.openai_connection.send(json.dumps(openai_configurations))
+            logger.info("[media-stream] Sent session.update")
+            response_data = json.loads(await call.openai_connection.recv())
+            logger.debug("[media-stream][openai] Session response: %s", json.dumps(response_data, indent=2))
             
-            if response_data.get('type') == 'session.created':
-                session_id = response_data.get('session', {}).get('id')
-                logger.info(f"[media-stream][openai] Session created with ID: {session_id}")
-                
-            else:
-                logger.error(f"[media-stream][openai] Failed to setup session: {response_data}")
-                return
+            # Send Open AI config and wait for session.updated event
+            while True:
+                response_data = json.loads(await call.openai_connection.recv())
 
-            await openai_ws.send(json.dumps({
-                "type": "conversation.item.create",
-                "item": {
-                    "type": "message",
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": "Say hello in one short sentence."}]
-                }
-            }))
+                logger.debug("[media-stream][openai] Event: %s", json.dumps(response_data, indent=2))
 
-            recv_task = asyncio.create_task(teler_to_openai(openai_ws, websocket))
-            send_task = asyncio.create_task(openai_to_teler(openai_ws, websocket))
+                event_type = response_data.get("type")
+
+                if event_type == "session.updated":
+                    call.session_updated = True
+                    logger.info("[media-stream] OpenAI session updated")
+                    break
+
+                if event_type == "session.created":
+                    call.session_created = True
+                    logger.info("OpenAI Realtime session created")
+
+                if event_type == "error":
+                    raise RuntimeError(f"OpenAI session update failed: {response_data}")
+
+            # Send initial instruction
+            await call.openai_connection.send(json.dumps(initial_instruction))
+            # Ask OpenAI to generate response
+            await call.openai_connection.send(json.dumps({"type": "response.create"}))
+            logger.info("[media-stream] Requested initial greeting")
+
+
+            # Start bi-directional media processing
+            recv_task = asyncio.create_task(teler_to_openai(call))
+            send_task = asyncio.create_task(openai_to_teler(call))
             
             await asyncio.gather(recv_task, send_task)
 
