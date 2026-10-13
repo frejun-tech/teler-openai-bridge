@@ -1,8 +1,3 @@
-from fastapi import websockets
-from fastapi import websockets
-from fastapi import websockets
-from fastapi import websockets
-from app.schemas import call
 import json
 import asyncio
 import logging
@@ -18,7 +13,7 @@ from app.schemas.call import Call
 from app.core.openai_config import openai_configurations, initial_instruction
 from app.utils.teler_to_openai import teler_to_openai
 from app.utils.openai_to_teler import openai_to_teler
-from app.utils.teler_client import TelerClient
+from teler import AsyncClient, CallFlow
 from app.utils.audio_resample import AudioResampler
 
 logger = logging.getLogger(__name__)
@@ -45,14 +40,14 @@ async def stream_flow(payload: CallFlowRequest):
     Return stream flow as JSON Response containing websocket url to connect
     """
     ws_url = f"wss://{settings.server_domain}/api/v1/calls/media-stream"
-    stream_flow = {
-        "action": "stream",
-        "ws_url": ws_url,
-        "chunk_size": 1600,
-        "sample_rate": "16k",  
-        "record": False
-    }
-    return JSONResponse(stream_flow)
+    return JSONResponse(
+        CallFlow.stream(
+            ws_url=ws_url,
+            sample_rate="16k",
+            chunk_size=1600,
+            record=False,
+        )
+    )
 
 @router.post("/initiate-call", status_code=status.HTTP_200_OK)
 async def initiate_call(call_request: CallRequest):
@@ -65,14 +60,14 @@ async def initiate_call(call_request: CallRequest):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="OPENAI_API_KEY not configured"
             )
-        teler_client = TelerClient(api_key=settings.teler_api_key)
-        call = await teler_client.create_call(
-            from_number=call_request.from_number,
-            to_number=call_request.to_number,
-            flow_url=f"https://{settings.server_domain}/api/v1/calls/flow",
-            status_callback_url=f"https://{settings.server_domain}/api/v1/webhooks/receiver",
-            record=True,
-        )
+        async with AsyncClient(api_key=settings.teler_api_key, timeout=10) as client:
+            call = await client.voice.calls.create(
+                from_number=call_request.from_number,
+                to_number=call_request.to_number,
+                flow_url=f"https://{settings.server_domain}/api/v1/calls/flow",
+                status_callback_url=f"https://{settings.server_domain}/api/v1/webhooks/receiver",
+                record=True,
+            )
         logger.info(f"Call created: {call}")
         return JSONResponse(content={"success": True, "call_id": call.id})
     except Exception as e:
